@@ -49,6 +49,8 @@ struct Config {
     max_entries: Option<usize>,
     #[serde(default = "Config::default_layer")]
     layer: Layer,
+    #[serde(default)]
+    password_entry: bool,
 }
 
 impl Config {
@@ -97,6 +99,7 @@ impl Default for Config {
             show_results_immediately: false,
             max_entries: None,
             layer: Self::default_layer(),
+            password_entry: false,
         }
     }
 }
@@ -464,6 +467,10 @@ fn activate(app: &gtk::Application, runtime_data: Rc<RefCell<RuntimeData>>) {
         .hexpand(true)
         .name(style_names::ENTRY)
         .build();
+
+    if runtime_data.borrow().config.password_entry {
+        entry.set_visibility(false);
+    }
 
     // Refresh the matches when text input changes
     let runtime_data_clone = runtime_data.clone();
