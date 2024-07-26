@@ -49,8 +49,8 @@ struct Config {
     max_entries: Option<usize>,
     #[serde(default = "Config::default_layer")]
     layer: Layer,
-    #[serde(default)]
-    password_entry: bool,
+    #[serde(default = "Config::default_mode")]
+    mode: Mode,
 }
 
 impl Config {
@@ -82,6 +82,10 @@ impl Config {
     fn default_layer() -> Layer {
         Layer::Overlay
     }
+
+    fn default_mode() -> Mode {
+        Mode::Normal
+    }
 }
 
 impl Default for Config {
@@ -99,7 +103,7 @@ impl Default for Config {
             show_results_immediately: false,
             max_entries: None,
             layer: Self::default_layer(),
-            password_entry: false,
+            mode: Mode::Normal,
         }
     }
 }
@@ -110,6 +114,12 @@ enum Layer {
     Bottom,
     Top,
     Overlay,
+}
+
+#[derive(Deserialize, Clone, ValueEnum)]
+enum Mode {
+    Normal,
+    Pinentry,
 }
 
 // Could have a better name
@@ -179,6 +189,9 @@ struct RuntimeData {
     /// Used for displaying errors later on
     error_label: String,
     config_dir: String,
+
+    // used to reduce updating the child tree
+    old_matches: Vec<Match>,
 }
 
 /// The naming scheme for CSS styling
@@ -261,6 +274,7 @@ fn main() {
         config,
         error_label,
         config_dir,
+        old_matches: vec![],
     }));
 
     let runtime_data_clone = runtime_data.clone();
@@ -468,7 +482,7 @@ fn activate(app: &gtk::Application, runtime_data: Rc<RefCell<RuntimeData>>) {
         .name(style_names::ENTRY)
         .build();
 
-    if runtime_data.borrow().config.password_entry {
+    if let Mode::Pinentry = runtime_data.borrow().config.mode {
         entry.set_visibility(false);
     }
 
@@ -689,8 +703,15 @@ fn activate(app: &gtk::Application, runtime_data: Rc<RefCell<RuntimeData>>) {
             }
 
             if runtime_data.borrow().config.show_results_immediately {
-                // Get initial matches
                 refresh_matches(String::new(), runtime_data);
+                return;
+            };
+
+            match runtime_data.clone().borrow().config.mode {
+                Mode::Normal => {}
+                Mode::Pinentry => {
+                    refresh_matches(String::new(), runtime_data);
+                }
             }
         });
 
@@ -701,7 +722,14 @@ fn activate(app: &gtk::Application, runtime_data: Rc<RefCell<RuntimeData>>) {
     window.show_all();
 }
 
-fn handle_matches(plugin_view: PluginView, runtime_data: &RuntimeData, matches: RVec<Match>) {
+fn handle_matches(plugin_view: PluginView, runtime_data: &mut RuntimeData, matches: RVec<Match>) {
+    let v = matches.clone().into_iter().collect::<Vec<Match>>();
+    if v == runtime_data.old_matches {
+        return;
+    }
+    runtime_data.old_matches = v;
+
+    // let new_matches = HashSet::from(v);
     // Clear out the old matches from the list
     for widget in plugin_view.list.children() {
         plugin_view.list.remove(&widget);
@@ -886,7 +914,11 @@ fn refresh_matches(input: String, runtime_data: Rc<RefCell<RuntimeData>>) {
                     async_match(plugin_view.clone(), runtime_data_clone.clone(), id)
                 });
             } else {
-                handle_matches(plugin_view.clone(), &runtime_data.borrow(), RVec::new());
+                handle_matches(
+                    plugin_view.clone(),
+                    &mut runtime_data.borrow_mut(),
+                    RVec::new(),
+                );
             }
         } else {
             glib::timeout_add_local(Duration::from_micros(1000), move || {
@@ -904,7 +936,7 @@ fn async_match(
 ) -> glib::Continue {
     match plugin_view.plugin.poll_matches()(id) {
         PollResult::Ready(matches) => {
-            handle_matches(plugin_view, &runtime_data.borrow(), matches);
+            handle_matches(plugin_view, &mut runtime_data.borrow_mut(), matches);
             glib::Continue(false)
         }
         PollResult::Pending => glib::Continue(true),

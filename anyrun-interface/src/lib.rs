@@ -33,7 +33,7 @@ pub struct PluginInfo {
 /// The `title` and `description` support pango markup when `use_pango` is set to true.
 /// Refer to [Pango Markup](https://docs.gtk.org/Pango/pango_markup.html) for how to use pango markup.
 #[repr(C)]
-#[derive(StableAbi, Clone)]
+#[derive(StableAbi, Clone, PartialEq, Eq)]
 pub struct Match {
     pub title: RString,
     pub description: ROption<RString>,
