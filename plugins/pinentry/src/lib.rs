@@ -51,7 +51,7 @@ fn init(_config_dir: RString) -> State {
 
 #[handler]
 fn handler(_match: Match, state: &State) -> HandleResult {
-    HandleResult::Stdout(format!("D {}", state.input).into_bytes().into())
+    HandleResult::Stdout(state.input.clone().into_bytes().into())
 }
 
 #[get_matches]
